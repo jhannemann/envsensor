@@ -1,0 +1,19 @@
+*                  text=auto
+
+*.cpp              text
+*.c                text
+*.h                text
+*.ino              text
+*.py               text
+*.xml              text
+*.html             text
+*.css              text
+*.js               text
+.gitattributes     text
+.gitignore         text
+MIT.LICENSE        text
+
+*.png              binary
+*.stl              binary
+*.graffle          binary
+*.pdf              binary
