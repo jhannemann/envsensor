@@ -5,31 +5,40 @@
 #include <WiFi101.h>
 #include <WiFiMDNSResponder.h>
 
+// #define NDEBUG
+
 #define BUTTON_1_PIN 2
 #define BUTTON_2_PIN 3
 #define OLED_RESET_PIN 4
 
-#define SENSOR_PERIOD 1000
+#define SENSOR_PERIOD 1000 // ms
+#define DEBOUNCE_DELAY 50 // ms
 
 const char ssid[] = "mynetwork";
 const char pass[] = "mypassword";
 char mdnsName[] = "weather00";
 
 enum State {
+  IDLE_STATE,
   DISPLAY_LAST,
   DISPLAY_MAX,
-  DISLAY_MIN,
+  DISPLAY_MIN,
   RESET_HIST
 };
 
 enum Event {
   BUTTON_1_PRESS,
-  BUTTON_2_PRESS
+  BUTTON_2_PRESS,
+  SENSOR_TIMEOUT
 };
 
 State state;
-bool eventFlags[2] = {false,
+bool eventFlags[3] = {false,
+                      false,
                       false};
+
+unsigned long timerStart;
+unsigned long now;
 
 // This is the driver for the accelerometer.
 // This will eventually be removed.
@@ -159,9 +168,33 @@ void checkButtons() {
   static bool button2State = true;
   static bool button2LastState = true;
 
-  button1State = digitalRead(BUTTON_1_PIN);
-  button2State = digitalRead(BUTTON_2_PIN);
+  // debounce buttons
+  static unsigned long lastDebounceTime1 = 0;
+  static unsigned long lastDebounceTime2 = 0;
+  static bool prelimButton1State = true;
+  static bool prelimButton2State = true;
 
+  bool reading1 = digitalRead(BUTTON_1_PIN);
+  bool reading2 = digitalRead(BUTTON_2_PIN);
+
+  if(reading1!=prelimButton1State) {
+    lastDebounceTime1 = now;
+  }
+  if((now-lastDebounceTime1)>DEBOUNCE_DELAY) {
+    button1State = reading1;
+  }
+  prelimButton1State = reading1;
+ 
+  if(reading2!=prelimButton2State) {
+    lastDebounceTime2 = now;
+  }
+  if((now-lastDebounceTime2)>DEBOUNCE_DELAY) {
+    button2State = reading2;
+  }
+  prelimButton2State = reading2;
+
+  // check whether buttons have been pressed
+  // rather than released
   if(button1State==false && button1LastState==true) {
     eventFlags[BUTTON_1_PRESS] = true;
 #ifndef NDEBUG
@@ -177,6 +210,49 @@ void checkButtons() {
 
   button1LastState = button1State;
   button2LastState = button2State;
+}
+
+void checkTimer() {
+  if((now-timerStart)>SENSOR_PERIOD) {
+    eventFlags[SENSOR_TIMEOUT] = true;
+  }
+}
+
+void printSensor() {
+  sensors_event_t event;
+  accel.getEvent(&event);
+  display.clearDisplay();
+  display.setCursor(0, 0);
+  float x = event.acceleration.x;
+  float y = event.acceleration.y;
+  float z = event.acceleration.z;
+  // F7 is the degree symbol character code
+  display.print(x); display.print(" \xF7"); display.println('C');
+  display.print(y); display.println(" %");
+  display.print(z); display.println(" hPa");
+  display.display();
+}
+
+void processEvents() {
+  // process events dependent on state
+  switch(state) {
+    case IDLE_STATE:
+      if(eventFlags[SENSOR_TIMEOUT]){
+        state = DISPLAY_LAST;
+        eventFlags[SENSOR_TIMEOUT] = false;
+        timerStart = now;
+      }
+      break;
+    case DISPLAY_LAST:
+        printSensor();
+        state = IDLE_STATE;
+      break;
+    default:
+#ifndef NDEBUG
+      Serial.println(F("Unknown state in processEvents()"));
+#endif
+    while (1) delay(1000);
+  }
 }
 
 void setup() {
@@ -215,25 +291,13 @@ void setup() {
   state = DISPLAY_LAST;
   pinMode(BUTTON_1_PIN, INPUT_PULLUP);
   pinMode(BUTTON_2_PIN, INPUT_PULLUP);
-}
-
-void printSensor() {
-  sensors_event_t event;
-  accel.getEvent(&event);
-  display.clearDisplay();
-  display.setCursor(0, 0);
-  float x = event.acceleration.x;
-  float y = event.acceleration.y;
-  float z = event.acceleration.z;
-  // F7 is the degree symbol character code
-  display.print(x); display.print(" \xF7"); display.println('C');
-  display.print(y); display.println(" %");
-  display.print(z); display.println(" hPa");
-  display.display();
+  now = millis();
+  timerStart = now;
 }
 
 void loop() {
+  now = millis();
   checkButtons();
-  printSensor();
-  delay(SENSOR_PERIOD);
+  checkTimer();
+  processEvents();
 }
