@@ -23,22 +23,29 @@ enum State {
   DISPLAY_LAST,
   DISPLAY_MAX,
   DISPLAY_MIN,
+  DISPLAY_UNIT,
   RESET_HIST
 };
 
 enum Event {
   BUTTON_1_PRESS,
   BUTTON_2_PRESS,
-  SENSOR_TIMEOUT
+  SENSOR_TIMEOUT,
+  NUM_EVENTS
 };
 
 State state;
-bool eventFlags[3] = {false,
-                      false,
-                      false};
+bool eventFlags[NUM_EVENTS] = {false,
+                               false,
+                               false};
 
 unsigned long timerStart;
 unsigned long now;
+
+float temperature;
+float humidity;
+float pressure;
+bool metric = true;
 
 // This is the driver for the accelerometer.
 // This will eventually be removed.
@@ -218,18 +225,57 @@ void checkTimer() {
   }
 }
 
-void printSensor() {
+void getSensor() {
   sensors_event_t event;
   accel.getEvent(&event);
+  temperature = event.acceleration.x;
+  humidity = event.acceleration.y;
+  pressure = event.acceleration.z;
+}
+
+void printSensor() {
   display.clearDisplay();
   display.setCursor(0, 0);
-  float x = event.acceleration.x;
-  float y = event.acceleration.y;
-  float z = event.acceleration.z;
+  if(metric) {
+    display.print(temperature);
+  }
+  else {
+    display.print(1.8F*temperature+32.0f);
+  }
   // F7 is the degree symbol character code
-  display.print(x); display.print(" \xF7"); display.println('C');
-  display.print(y); display.println(" %");
-  display.print(z); display.println(" hPa");
+  display.print(" \xF7"); 
+  if(metric) {
+    display.println('C');
+  }
+  else {
+    display.println('F');
+  }
+  display.print(humidity); display.println(" %");
+  if(metric) {
+    display.print(pressure); 
+  }
+  else {
+    display.print(pressure*0.02953f);
+  }
+  if(metric) {
+    display.println(" hPa");
+  }
+  else {
+    display.println(" inHg");
+  }
+  display.display();
+}
+
+void printUnit() {
+  display.clearDisplay();
+  display.setCursor(0, 0);
+  display.println("Units:");
+  if(metric) {
+    display.println("Metric");
+  }
+  else {
+    display.println("Imperial");
+  }
   display.display();
 }
 
@@ -242,10 +288,26 @@ void processEvents() {
         eventFlags[SENSOR_TIMEOUT] = false;
         timerStart = now;
       }
+      if(eventFlags[BUTTON_1_PRESS]){
+        state = DISPLAY_UNIT;
+        eventFlags[BUTTON_1_PRESS] = false;
+      }
+      break;
+    case DISPLAY_UNIT:
+      printUnit();
+      if(eventFlags[BUTTON_1_PRESS]){
+        state = DISPLAY_LAST;
+        eventFlags[BUTTON_1_PRESS] = false;
+      }
+      if(eventFlags[BUTTON_2_PRESS]){
+        metric = !metric;
+        eventFlags[BUTTON_2_PRESS] = false;
+      }
       break;
     case DISPLAY_LAST:
-        printSensor();
-        state = IDLE_STATE;
+      getSensor();
+      printSensor();
+      state = IDLE_STATE;
       break;
     default:
 #ifndef NDEBUG
