@@ -225,6 +225,24 @@ void checkTimer() {
   }
 }
 
+void clearButton1() {
+  eventFlags[BUTTON_1_PRESS] = false;
+}
+
+void clearButton2() {
+  eventFlags[BUTTON_2_PRESS] = false;
+}
+
+void clearButtons() {
+  clearButton1();
+  clearButton2();
+}
+
+void resetTimer() {
+  eventFlags[SENSOR_TIMEOUT] = false;
+  timerStart = now;
+}
+
 void getSensor() {
   sensors_event_t event;
   accel.getEvent(&event);
@@ -285,29 +303,28 @@ void processEvents() {
     case IDLE_STATE:
       if(eventFlags[SENSOR_TIMEOUT]){
         state = DISPLAY_LAST;
-        eventFlags[SENSOR_TIMEOUT] = false;
-        timerStart = now;
       }
       if(eventFlags[BUTTON_1_PRESS]){
         state = DISPLAY_UNIT;
-        eventFlags[BUTTON_1_PRESS] = false;
       }
+      clearButtons();
       break;
     case DISPLAY_UNIT:
       printUnit();
       if(eventFlags[BUTTON_1_PRESS]){
         state = DISPLAY_LAST;
-        eventFlags[BUTTON_1_PRESS] = false;
       }
       if(eventFlags[BUTTON_2_PRESS]){
         metric = !metric;
-        eventFlags[BUTTON_2_PRESS] = false;
       }
+      clearButtons();
+      resetTimer();
       break;
     case DISPLAY_LAST:
       getSensor();
       printSensor();
       state = IDLE_STATE;
+      resetTimer();
       break;
     default:
 #ifndef NDEBUG
