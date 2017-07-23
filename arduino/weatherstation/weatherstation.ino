@@ -14,6 +14,8 @@
 #define SENSOR_PERIOD 1000 // ms
 #define DEBOUNCE_DELAY 50 // ms
 
+#define WIFI_CONNECT_TIMEOUT 10 // s
+
 const char ssid[] = "mynetwork";
 const char pass[] = "mypassword";
 char mdnsName[] = "weather00";
@@ -24,6 +26,8 @@ enum State {
   DISPLAY_MAX,
   DISPLAY_MIN,
   DISPLAY_UNIT,
+  DISPLAY_WIFI_CONN,
+  DISPLAY_WIFI,
   RESET_HIST
 };
 
@@ -55,6 +59,8 @@ Adafruit_LSM303_Accel_Unified accel(42);
 Adafruit_BME280 sensor;
 Adafruit_SSD1306 display(OLED_RESET_PIN);
 
+bool wifiOn = false;
+int wifiStatus = WL_IDLE_STATUS;
 WiFiMDNSResponder mdnsResponder;
 WiFiServer server(80);
 
@@ -297,6 +303,69 @@ void printUnit() {
   display.display();
 }
 
+void connectWifi() {
+  display.setTextSize(1);
+  display.clearDisplay();
+  display.setCursor(0, 0);
+  display.println("Connecting...");
+  display.print("SSID: ");
+  display.println(ssid);
+  display.display();
+  int status = WiFi.begin(ssid, pass);
+  int timeout = 0;
+  while(status != WL_CONNECTED && timeout < 10) {
+    status = WiFi.status();
+    ++timeout;
+    display.print('.');
+    display.display();
+    delay(1000);
+  }
+  display.println();
+  if(status==WL_CONNECTED) {
+    display.println("Success!");
+    wifiOn = true;
+  }
+  else {
+    display.println("Timeout!");
+    wifiOn = false;
+  }
+  display.display();
+  delay(2000);
+  display.setTextSize(2);
+}
+
+void disconnectWifi() {
+  WiFi.disconnect();
+  wifiOn = false;
+}
+
+void printWifi() {
+  display.clearDisplay();
+  display.setCursor(0, 0);
+  display.print("WiFi: ");
+  if(wifiOn) {
+    display.println("On\n");
+    display.setTextSize(1);
+    display.print("IP: ");
+    IPAddress ip = WiFi.localIP();
+    display.print(ip[0]);
+    display.print('.');
+    display.print(ip[1]);
+    display.print('.');
+    display.print(ip[2]);
+    display.print('.');
+    display.println(ip[3]);       
+    display.print("Name: ");
+    display.print(mdnsName);
+    display.println(".local");
+    display.setTextSize(2);
+  }
+  else {
+    display.println("Off");
+  }
+  display.display();
+}
+
 void processEvents() {
   // process events dependent on state
   switch(state) {
@@ -312,10 +381,27 @@ void processEvents() {
     case DISPLAY_UNIT:
       printUnit();
       if(eventFlags[BUTTON_1_PRESS]){
-        state = DISPLAY_LAST;
+        state = DISPLAY_WIFI;
       }
       if(eventFlags[BUTTON_2_PRESS]){
         metric = !metric;
+      }
+      clearButtons();
+      resetTimer();
+      break;
+    case DISPLAY_WIFI:
+      printWifi();
+      if(eventFlags[BUTTON_1_PRESS]){
+        state = DISPLAY_LAST;
+      }
+      if(eventFlags[BUTTON_2_PRESS]){
+        if(wifiOn){
+          disconnectWifi();
+        }
+        else{
+          connectWifi();
+        }
+      state = DISPLAY_WIFI;
       }
       clearButtons();
       resetTimer();
