@@ -15,6 +15,8 @@
 #define DEBOUNCE_DELAY 50 // ms
 
 #define WIFI_CONNECT_TIMEOUT 10 // s
+#define CLIENT_REFRESH 5 // s
+#define CLIENT_CONNECT_TIMEOUT 250 // ms
 
 const char ssid[] = "mynetwork";
 const char pass[] = "mypassword";
@@ -23,12 +25,9 @@ char mdnsName[] = "weather00";
 enum State {
   IDLE_STATE,
   DISPLAY_LAST,
-  DISPLAY_MAX,
-  DISPLAY_MIN,
   DISPLAY_UNIT,
   DISPLAY_WIFI_CONN,
-  DISPLAY_WIFI,
-  RESET_HIST
+  DISPLAY_WIFI
 };
 
 enum Event {
@@ -321,9 +320,10 @@ void connectWifi() {
     delay(1000);
   }
   display.println();
-  if(status==WL_CONNECTED) {
+  if (status == WL_CONNECTED) {
     display.println("Success!");
     wifiOn = true;
+    server.begin();
   }
   else {
     display.println("Timeout!");
@@ -416,7 +416,103 @@ void processEvents() {
 #ifndef NDEBUG
       Serial.println(F("Unknown state in processEvents()"));
 #endif
-    while (1) delay(1000);
+      while (1) delay(1000);
+  }
+}
+
+void checkConnection() {
+  mdnsResponder.poll();
+  WiFiClient client = server.available();
+  if (client) {
+#ifndef NDEBUG
+    Serial.println("new client");
+#endif
+    unsigned long connectionTime = millis();
+    // an http request ends with a blank line
+    boolean currentLineIsBlank = true;
+    // Client connections are prone to get stuck in the "connected" state.
+    // No data woule be read from the client, resulting in the server
+    // getting stuck.
+    // As a workaround, the client will be disconnected after a timeout period.
+    while (client.connected() && millis()-connectionTime<CLIENT_CONNECT_TIMEOUT) {
+#ifndef NDEBUG
+      Serial.println("client connected");
+#endif
+      if (client.available()) {
+#ifndef NDEBUG
+        Serial.println("read client data");
+#endif
+        char c = client.read();
+        // if you've gotten to the end of the line (received a newline
+        // character) and the line is blank, the http request has ended,
+        // so you can send a reply
+        if (c == '\n' && currentLineIsBlank) {
+          // send a standard http response header
+          client.println("HTTP/1.1 200 OK");
+          client.println("Content-Type: text/html");
+          client.println("Connection: close");
+          client.print("Refresh: ");
+          client.println(CLIENT_REFRESH);
+          client.println();
+          client.println("<!DOCTYPE HTML>");
+          client.println("<html>");
+          client.println("<body>");
+          client.println("<table>");
+          client.println("<tr>");
+          client.println("<td>");
+          client.println("Station: ");
+          client.println("</td>");
+          client.println("<td>");
+          client.println(mdnsName);
+          client.println("</td>");
+          client.println("</tr>");
+          client.println("<tr>");
+          client.println("<td>");
+          client.println("Temperature: ");
+          client.println("</td>");
+          client.println("<td>");
+          client.println(temperature);
+          client.println("</td>");
+          client.println("</tr>");
+          client.println("<tr>");
+          client.println("<td>");
+          client.println("Humidity: ");
+          client.println("</td>");
+          client.println("<td>");
+          client.println(humidity);
+          client.println("</td>");
+          client.println("</tr>");
+          client.println("<tr>");
+          client.println("<td>");
+          client.println("Pressure: ");
+          client.println("</td>");
+          client.println("<td>");
+          client.println(pressure);
+          client.println("</td>");
+          client.println("</tr>");
+          client.println("</table>");
+          client.println("</body>");
+          client.println("</html>");
+          break;
+        }
+        if (c == '\n') {
+          // you're starting a new line
+          currentLineIsBlank = true;
+        }
+        else if (c != '\r') {
+          // you've gotten a character on the current line
+          currentLineIsBlank = false;
+        }
+      }
+    }
+    // give the web browser time to receive the data
+    delay(1);
+
+    // close the connection
+    client.stop();
+#ifndef NDEBUG
+    Serial.println("client disconnected");
+#endif
   }
 }
 
@@ -429,7 +525,8 @@ void setup() {
   Serial.println("Initializing...");
 #endif
   // display splash screen
-  display.begin(SSD1306_SWITCHCAPVCC, 0x3D);  // initialize with the I2C addr 0x3D (for the 128x64)
+  // initialize with the I2C addr 0x3D (for the 128x64)
+  display.begin(SSD1306_SWITCHCAPVCC, 0x3D);
   display.clearDisplay();
   drawlogo(ksu_logo_bits, ksu_logo_width, ksu_logo_height);
   display.display();
@@ -465,4 +562,7 @@ void loop() {
   checkButtons();
   checkTimer();
   processEvents();
+  if (wifiOn) {
+    checkConnection();
+  }
 }
