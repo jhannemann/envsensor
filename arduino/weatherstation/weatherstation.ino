@@ -50,11 +50,6 @@ float humidity;
 float pressure;
 bool metric = true;
 
-// This is the driver for the accelerometer.
-// This will eventually be removed.
-#include <Adafruit_LSM303_U.h>
-Adafruit_LSM303_Accel_Unified accel(42);
-
 Adafruit_BME280 sensor;
 Adafruit_SSD1306 display(OLED_RESET_PIN);
 
@@ -249,11 +244,9 @@ void resetTimer() {
 }
 
 void getSensor() {
-  sensors_event_t event;
-  accel.getEvent(&event);
-  temperature = event.acceleration.x;
-  humidity = event.acceleration.y;
-  pressure = event.acceleration.z;
+  temperature = sensor.readTemperature();
+  humidity = sensor.readHumidity();
+  pressure = sensor.readPressure()/100.0f;
 }
 
 void printSensor() {
@@ -263,7 +256,7 @@ void printSensor() {
     display.print(temperature);
   }
   else {
-    display.print(1.8F*temperature+32.0f);
+    display.print(1.8f*temperature+32.0f);
   }
   // F7 is the degree symbol character code
   display.print(" \xF7"); 
@@ -543,13 +536,16 @@ void setup() {
   display.display();
   delay(2000);
   // Initialize the sensor
-  if(!accel.begin()) {
+  if(!sensor.begin()) {
     display.clearDisplay();
     display.setCursor(0,10);
     display.println(F("No sensor\ndetected."));
     display.display();
     while(1);
   }
+  // wait a while for the sensor to get ready
+  // to prevent NaN on the display
+  delay(100);
   state = DISPLAY_LAST;
   pinMode(BUTTON_1_PIN, INPUT_PULLUP);
   pinMode(BUTTON_2_PIN, INPUT_PULLUP);
