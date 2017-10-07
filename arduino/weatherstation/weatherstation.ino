@@ -7,11 +7,18 @@
 
 // #define NDEBUG
 
+// In forced mode, the sensor must be told to take a measurement
+// After the measurement, it goes to sleep mode
+// In normal mode, the sensor takes continuous measurements
+// #define SENSOR_FORCED_MODE
+
+// In forced mode, SENSOR PERIOD is recommended to be 60000 ms (1 min)
+#define SENSOR_PERIOD 1000 // ms
+
 #define BUTTON_1_PIN 2
 #define BUTTON_2_PIN 3
 #define OLED_RESET_PIN 4
 
-#define SENSOR_PERIOD 1000 // ms
 #define DEBOUNCE_DELAY 50 // ms
 
 #define WIFI_CONNECT_TIMEOUT 10 // s
@@ -244,6 +251,9 @@ void resetTimer() {
 }
 
 void getSensor() {
+#ifdef SENSOR_FORCED_MODE
+  sensor.takeForcedMeasurement();
+#endif
   temperature = sensor.readTemperature();
   humidity = sensor.readHumidity();
   pressure = sensor.readPressure()/100.0f;
@@ -543,6 +553,13 @@ void setup() {
     display.display();
     while(1);
   }
+#ifdef SENSOR_FORCED_MODE
+  sensor.setSampling(Adafruit_BME280::MODE_FORCED,
+                     Adafruit_BME280::SAMPLING_X1, // temperature
+                     Adafruit_BME280::SAMPLING_X1, // pressure
+                     Adafruit_BME280::SAMPLING_X1, // humidity
+                     Adafruit_BME280::FILTER_OFF);
+#endif
   // wait a while for the sensor to get ready
   // to prevent NaN on the display
   delay(100);
