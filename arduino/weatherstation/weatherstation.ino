@@ -27,7 +27,7 @@
 
 const char ssid[] = "mynetwork";
 const char pass[] = "mypassword";
-char mdnsName[] = "weather00";
+const char mdnsName[] = "weather00";
 
 enum State {
   IDLE_STATE,
