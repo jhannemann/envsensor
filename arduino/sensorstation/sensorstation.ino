@@ -6,17 +6,19 @@
 #include <Adafruit_Sensor.h>
 #include <Adafruit_BME280.h>
 
-const uint8_t SYSTEM_ID = 1;
+
+// #define NDEBUG
+
+// role is either SENDER or Receiver
+//#define SENDER
+#define RECEIVER
+// IDs 1-127 are senders
+// IDs 128-160 are receivers
+const uint8_t SYSTEM_ID = 128;
 const int SENSOR_PERIOD = 10000; // ms
 const float RADIO_FREQUENCY = 900.0f; //mHz
 const char* LOG_FILENAME = "log.txt";
 const char* DATA_FILENAME = "data";
-
-// role is either SENDER or Receiver
-#define SENDER
-// #define RECEIVER
-
-// #define NDEBUG
 
 // In forced mode, the sensor must be told to take a measurement
 // After the measurement, it goes to sleep mode
@@ -95,7 +97,6 @@ void writeData() {
 #ifndef NDEBUG
   else {
     logMessage("Could not open data file");
-    Serial.println("Could not open data file");
   }
 #endif
 
@@ -124,7 +125,6 @@ void initializeSensor() {
   if(!sensor.begin()) {
 #ifndef NDEBUG
     logMessage("Coulnd't find sensor");
-    Serial.println("Couldn't find sensor");
 #endif
     while(1) delay(60000);
   }
@@ -146,7 +146,6 @@ void initializeRadio() {
   if(!rf95.init()){
 #ifndef NDEBUG
     logMessage("Couldn't find radio");
-    Serial.println("Couldn't find radio");
 #endif
     while(1) delay(60000);
   }
@@ -157,14 +156,12 @@ void initializeRTC() {
   if(!rtc.begin()) {
 #ifndef NDEBUG
     logMessage("Couln't find RTC");
-    Serial.println("Couldn't find RTC");
 #endif
     while (1) delay(60000);
   }
   if(!rtc.initialized()) {
 #ifndef NDEBUG
     logMessage("RTC is not running");
-    Serial.println("RTC is not running");
 #endif
     // set the RTC to the date & time this sketch was compiled
     rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
@@ -175,15 +172,14 @@ void initializeSD() {
   pinMode(SD_CS, OUTPUT);
   enableSD();
   if (!SD.begin(SD_CS)) {
-  #ifndef NDEBUG
-  logMessage("SD initialization failed");
-    Serial.println("SD initialization failed");
-  #endif
+#ifndef NDEBUG
+  Serial.println("SD initialization failed");
+#endif
     while (1) delay(60000);
   } else {
-  #ifndef NDEBUG
+#ifndef NDEBUG
     Serial.println("SD card is present.");
-  #endif
+#endif
   }  
 }
 
@@ -202,11 +198,10 @@ void setup() {
   initializeSerial();
 #endif
   initializeSD();
-
-  initializeSensor();
   initializeRadio();
   initializeRTC();
 #ifdef SENDER
+  initializeSensor();
   logMessage("Initializing sender complete");
 #endif
 #ifdef RECEIVER
@@ -215,7 +210,13 @@ void setup() {
 }
 
 void loop() {
+#ifdef SENDER
   getSensor();
   writeData();
   delay(SENSOR_PERIOD);
+#endif
+
+#ifdef RECEIVER
+   delay(10000);
+#endif
 }
