@@ -6,9 +6,11 @@
 #include <Adafruit_Sensor.h>
 #include <Adafruit_BME280.h>
 
+const uint8_t SYSTEM_ID = 1;
 const int SENSOR_PERIOD = 10000; // ms
 const float RADIO_FREQUENCY = 900.0f; //mHz
 const char* LOG_FILENAME = "log.txt";
+const char* DATA_FILENAME = "data";
 
 // #define NDEBUG
 
@@ -20,6 +22,9 @@ const char* LOG_FILENAME = "log.txt";
 float temperature;
 float humidity;
 float pressure;
+
+char packet[10];
+
 Adafruit_BME280 sensor;
 
 RTC_PCF8523 rtc;
@@ -61,14 +66,38 @@ void getSensor() {
   temperature = sensor.readTemperature();
   humidity = sensor.readHumidity();
   pressure = sensor.readPressure()/100.0f;
+
+  uint32_t timestamp = now.unixtime();
+  // convert temperature to fixed point, one significant decimal
+  int16_t itemperature = (int16_t)(temperature*10);
+  // convert humidity to integer
+  uint8_t ihumidity = (uint8_t)(humidity);
+  // convert pressure to fixed point, one significant decimal
+  uint16_t ipressure = (uint16_t)(pressure*10);
+  memcpy(&packet[0], &SYSTEM_ID, 1);
+  memcpy(&packet[1], &timestamp, 4);
+  memcpy(&packet[5], &itemperature, 2);
+  memcpy(&packet[7], &ihumidity, 1);
+  memcpy(&packet[8], &ipressure, 2);
+  File datafile = SD.open(DATA_FILENAME, FILE_WRITE);
+  if(datafile) {
+    datafile.write(packet, 10);
+    datafile.close();
+  }
+#ifndef NDEBUG
+  else {
+    logMessage("Could not open data file");
+    Serial.println("Could not open data file");
+#endif
+  } 
 #ifndef NDEBUG
   Serial.print(now.unixtime());
   Serial.print(' ');
-  Serial.print(temperature);
+  Serial.print(itemperature);
   Serial.print(' ');
-  Serial.print(humidity);
+  Serial.print(ihumidity);
   Serial.print(' ');
-  Serial.println(pressure);
+  Serial.println(ipressure);
 #endif
 }
 
