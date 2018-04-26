@@ -12,7 +12,11 @@ const float RADIO_FREQUENCY = 900.0f; //mHz
 const char* LOG_FILENAME = "log.txt";
 const char* DATA_FILENAME = "data";
 
-#define NDEBUG
+// role is either SENDER or Receiver
+#define SENDER
+// #define RECEIVER
+
+// #define NDEBUG
 
 // In forced mode, the sensor must be told to take a measurement
 // After the measurement, it goes to sleep mode
@@ -38,6 +42,7 @@ RH_RF95 rf95(RADIO_CS, RADIO_IRQ);
 const int SD_CS = 10;
 
 void logMessage(String message) {
+  enableSD();
   now = rtc.now();
   File logfile = SD.open(LOG_FILENAME, FILE_WRITE);
   if(logfile) {
@@ -66,7 +71,10 @@ void getSensor() {
   temperature = sensor.readTemperature();
   humidity = sensor.readHumidity();
   pressure = sensor.readPressure()/100.0f;
+}
 
+void writeData() {
+  enableSD();
   uint32_t timestamp = now.unixtime();
   // convert temperature to fixed point, one significant decimal
   int16_t itemperature = (int16_t)(temperature*10);
@@ -90,7 +98,7 @@ void getSensor() {
     Serial.println("Could not open data file");
   }
 #endif
- 
+
 #ifndef NDEBUG
   Serial.print(now.unixtime());
   Serial.print(' ');
@@ -99,7 +107,7 @@ void getSensor() {
   Serial.print(ihumidity);
   Serial.print(' ');
   Serial.println(ipressure);
-#endif
+#endif  
 }
 
 void enableRadio() {
@@ -193,14 +201,21 @@ void setup() {
 #ifndef NDEBUG
   initializeSerial();
 #endif
+  initializeSD();
+
   initializeSensor();
   initializeRadio();
   initializeRTC();
-  initializeSD();
-  logMessage("Initialization complete");
+#ifdef SENDER
+  logMessage("Initializing sender complete");
+#endif
+#ifdef RECEIVER
+  logMessage("Initializing receiver complete");
+#endif
 }
 
 void loop() {
   getSensor();
+  writeData();
   delay(SENSOR_PERIOD);
 }
