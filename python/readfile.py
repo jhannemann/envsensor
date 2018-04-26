@@ -3,9 +3,9 @@ import struct
 class Station:
     def __init__(self, id):
         self.id = id
-        self.timestamps = []
-        self.temperatures = []
-        self.humidities = []
+        self.timestamp = []
+        self.temperature = []
+        self.humidity = []
         self.pressure = []
 
 stations = {}
@@ -31,9 +31,9 @@ with open('data', 'rb') as binary_file:
         print(id, timestamp, temperature, humidity, pressure)
         if id not in stations.keys():
             stations[id] = Station(id)
-        stations[id].timestamps.append(timestamp)
-        stations[id].temperatures.append(temperature)
-        stations[id].humidities.append(humidity)
+        stations[id].timestamp.append(timestamp)
+        stations[id].temperature.append(temperature)
+        stations[id].humidity.append(humidity)
         stations[id].pressure.append(pressure)
 
 
