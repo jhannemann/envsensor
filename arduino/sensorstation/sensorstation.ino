@@ -12,7 +12,7 @@ const float RADIO_FREQUENCY = 900.0f; //mHz
 const char* LOG_FILENAME = "log.txt";
 const char* DATA_FILENAME = "data";
 
-// #define NDEBUG
+#define NDEBUG
 
 // In forced mode, the sensor must be told to take a measurement
 // After the measurement, it goes to sleep mode
@@ -88,8 +88,9 @@ void getSensor() {
   else {
     logMessage("Could not open data file");
     Serial.println("Could not open data file");
+  }
 #endif
-  } 
+ 
 #ifndef NDEBUG
   Serial.print(now.unixtime());
   Serial.print(' ');
