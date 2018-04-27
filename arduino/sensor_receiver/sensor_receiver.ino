@@ -138,7 +138,7 @@ void tryReceive(uint8_t id) {
         ++packetCount;
         if(len!=sizeof(packet)) break;
         enableSD();
-        datafile.write(packet);
+        datafile.write(packet, sizeof(packet));
         enableRadio();
       }
      enableSD();
