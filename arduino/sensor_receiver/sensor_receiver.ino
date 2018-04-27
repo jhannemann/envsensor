@@ -5,7 +5,7 @@
 #include <RHReliableDatagram.h>
 #include <RTClib.h>
 
-// #define NDEBUG
+//#define NDEBUG
 
 // IDs 1-127 are senders
 // IDs 128-160 are receivers
@@ -31,6 +31,16 @@ RHReliableDatagram datagram(radio, SYSTEM_ID);
 
 const int SD_CS = 10;
 
+void enableRadio() {
+  digitalWrite(SD_CS, HIGH);
+  digitalWrite(RADIO_CS, LOW);
+}
+
+void enableSD() {
+  digitalWrite(RADIO_CS, HIGH);
+  digitalWrite(SD_CS, LOW);
+}
+
 void logMessage(String message) {
   enableSD();
   now = rtc.now();
@@ -46,40 +56,13 @@ void logMessage(String message) {
     logfile.close();
 #ifndef NDEBUG
     Serial.println(message);
+#endif
   }
+#ifndef NDEBUG
   else {
     Serial.println("Could not open log file");
-#endif
-  }
-}
-
-void writePacket() {
-  enableSD();
-  File datafile = SD.open(DATA_FILENAME, FILE_WRITE);
-  if(datafile) {
-    datafile.write(packet, sizeof(packet));
-    datafile.close();
-  }
-#ifndef NDEBUG
-  else {
-    logMessage("Could not open data file");
   }
 #endif
-
-#ifndef NDEBUG
-  Serial.println("Written packet");
-  Serial.println(packet);
-#endif  
-}
-
-void enableRadio() {
-  digitalWrite(SD_CS, HIGH);
-  digitalWrite(RADIO_CS, LOW);
-}
-
-void enableSD() {
-  digitalWrite(RADIO_CS, HIGH);
-  digitalWrite(SD_CS, LOW);
 }
 
 void initializeRadio() {
@@ -139,17 +122,28 @@ void initializeSerial() {
 void tryReceive(uint8_t id) {
   String message = "Pinging ";
   message += String(id, DEC);
+  enableSD();
   logMessage(message);
   enableRadio();
   digitalWrite(LED_BUILTIN, HIGH);
   if(datagram.sendtoWait(&pingData, sizeof(pingData), id)) {
-    uint8_t len = sizeof(packet);
-    uint8_t from;
-    if (datagram.recvfromAckTimeout((uint8_t*)packet, &len, 2000, &from)) {
-      message = "Received packet from ";
-      message += String(from, DEC);
-      logMessage(message);
+    enableSD();
+    File datafile = SD.open(DATA_FILENAME, FILE_WRITE);
+    if(datafile) {
+      uint8_t len = sizeof(packet);
+      uint8_t from;
       enableRadio();
+      int packetCount = 0;
+      while (datagram.recvfromAckTimeout((uint8_t*)packet, &len, 2000, &from)) {
+        ++packetCount;
+        if(len!=sizeof(packet)) break;
+        enableSD();
+        datafile.write(packet);
+        enableRadio();
+      }
+     enableSD();
+     datafile.close();
+     logMessage(String("Received ") + String(packetCount, DEC) + " packets");
     }
   }
   digitalWrite(LED_BUILTIN, LOW);
@@ -167,6 +161,6 @@ void setup() {
 
 void loop() {
   tryReceive(1);
-  writePacket();
-  //delay(1000);
+  //writePacket();
+  delay(2000);
 }

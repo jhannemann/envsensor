@@ -7,7 +7,7 @@
 #include <Adafruit_Sensor.h>
 #include <Adafruit_BME280.h>
 
-#define NDEBUG
+//#define NDEBUG
 
 // IDs 1-127 are senders
 // IDs 128-160 are receivers
@@ -197,7 +197,7 @@ void initializeSerial() {
 
 void trySend() {
   enableRadio();
-  if(datagram.waitAvailableTimeout(LISTENING_TIMEOUT)){
+  if(datagram.waitAvailableTimeout(LISTENING_TIMEOUT)) {
     // we have been pinged
     uint8_t len = sizeof(buf);
     uint8_t from;
@@ -205,11 +205,37 @@ void trySend() {
       String message = "Ping from ";
       message += String(from, DEC);
       logMessage(message);
-      if (!datagram.sendtoWait((uint8_t*)packet, sizeof(packet), from))
-        Serial.println("sendtoWait failed");
+      enableSD();
+      File datafile = SD.open(DATA_FILENAME, FILE_READ);
+      if(datafile) {
+        while(datafile.available()) {
+          datafile.read(packet, sizeof(packet));
+          enableRadio();
+          if (!datagram.sendtoWait((uint8_t*)packet, sizeof(packet), from)) {
+#ifndef NDEBUG
+            Serial.println("sending packet failed");
+#endif
+            break;
+          }
+          Serial.print('.');
+          enableSD();
+        }
+        enableRadio();
+        if (!datagram.sendtoWait((uint8_t*)pingData, sizeof(pingData), from)) { 
+#ifndef NDEBUG
+          Serial.println("sending eof failed");
+#endif
+        }
+      }
+#ifndef NDEBUG
+      else {
+        logMessage("Could not open data file");
+      }
+#endif
+    enableSD();
+    datafile.close();
     }
   }
-  enableRadio();
 }
 
 void setup() {
@@ -227,5 +253,5 @@ void loop() {
   getSensor();
   writeData();
   trySend();
-  //delay(SENSOR_PERIOD);
+  delay(SENSOR_PERIOD);
 }
