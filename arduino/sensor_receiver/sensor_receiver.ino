@@ -126,26 +126,29 @@ void tryReceive(uint8_t id) {
   logMessage(message);
   enableRadio();
   digitalWrite(LED_BUILTIN, HIGH);
-  if(datagram.sendtoWait(&pingData, sizeof(pingData), id)) {
+  enableSD();
+  File datafile = SD.open(DATA_FILENAME, FILE_WRITE);
+  if(!datafile) {
     enableSD();
-    File datafile = SD.open(DATA_FILENAME, FILE_WRITE);
-    if(datafile) {
-      uint8_t len = sizeof(packet);
-      uint8_t from;
-      enableRadio();
-      int packetCount = 0;
-      while (datagram.recvfromAckTimeout((uint8_t*)packet, &len, 2000, &from)) {
-        ++packetCount;
-        if(len!=sizeof(packet)) break;
-        enableSD();
-        datafile.write(packet, sizeof(packet));
-        enableRadio();
-      }
-     enableSD();
-     datafile.close();
-     logMessage(String("Received ") + String(packetCount, DEC) + " packets");
-    }
+    logMessage("Could not open datafile for writing");
+    datafile.close();
+    return;
   }
+  int packetCount = 0;
+  while(datagram.sendtoWait(&pingData, sizeof(pingData), id)) {
+    uint8_t len = sizeof(packet);
+    uint8_t from;
+    enableRadio();
+    datagram.recvfromAckTimeout((uint8_t*)packet, &len, 2000, &from);
+    ++packetCount;
+    if(len!=sizeof(packet)) break;
+    enableSD();
+    datafile.write(packet, sizeof(packet));
+    enableRadio();
+    }
+  enableSD();
+  datafile.close();
+  logMessage(String("Received ") + String(packetCount, DEC) + " packets");
   digitalWrite(LED_BUILTIN, LOW);
 }
 
@@ -161,6 +164,6 @@ void setup() {
 
 void loop() {
   tryReceive(1);
-  //writePacket();
+  tryReceive(2);
   delay(2000);
 }

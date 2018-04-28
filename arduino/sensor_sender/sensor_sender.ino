@@ -7,11 +7,11 @@
 #include <Adafruit_Sensor.h>
 #include <Adafruit_BME280.h>
 
-//#define NDEBUG
+#define NDEBUG
 
 // IDs 1-127 are senders
 // IDs 128-160 are receivers
-const uint8_t SYSTEM_ID = 1;
+const uint8_t SYSTEM_ID = 2;
 const int SENSOR_PERIOD = 10000; // ms
 const float RADIO_FREQUENCY = 900.0f; //mHz
 const char* LOG_FILENAME = "log.txt";
@@ -45,9 +45,19 @@ RHReliableDatagram datagram(radio, SYSTEM_ID);
 
 const int SD_CS = 10;
 
+void enableRadio() {
+  digitalWrite(SD_CS, HIGH);
+  digitalWrite(RADIO_CS, LOW);
+}
+
+void enableSD() {
+  digitalWrite(RADIO_CS, HIGH);
+  digitalWrite(SD_CS, LOW);
+}
+
 void logMessage(String message) {
-  enableSD();
   now = rtc.now();
+  enableSD();
   File logfile = SD.open(LOG_FILENAME, FILE_WRITE);
   if(logfile) {
     char timestamp[21];
@@ -78,7 +88,6 @@ void getSensor() {
 }
 
 void writeData() {
-  enableSD();
   uint32_t timestamp = now.unixtime();
   // convert temperature to fixed point, one significant decimal
   int16_t itemperature = (int16_t)(temperature*10);
@@ -91,17 +100,17 @@ void writeData() {
   memcpy(&packet[5], &itemperature, 2);
   memcpy(&packet[7], &ihumidity, 1);
   memcpy(&packet[8], &ipressure, 2);
+  enableSD();
   File datafile = SD.open(DATA_FILENAME, FILE_WRITE);
-  if(datafile) {
-    datafile.write(packet, 10);
-    datafile.close();
-  }
+  if(!datafile) {
 #ifndef NDEBUG
-  else {
-    logMessage("Could not open data file");
-  }
+    logMessage("Could not open data file for writing");
 #endif
-
+    datafile.close();
+    return;
+  }
+  datafile.write(packet, sizeof(packet));
+  datafile.close();
 #ifndef NDEBUG
   Serial.print(now.unixtime());
   Serial.print(' ');
@@ -111,16 +120,6 @@ void writeData() {
   Serial.print(' ');
   Serial.println(ipressure);
 #endif  
-}
-
-void enableRadio() {
-  digitalWrite(SD_CS, HIGH);
-  digitalWrite(RADIO_CS, LOW);
-}
-
-void enableSD() {
-  digitalWrite(RADIO_CS, HIGH);
-  digitalWrite(SD_CS, LOW);
 }
 
 void initializeSensor() {
@@ -196,44 +195,47 @@ void initializeSerial() {
 #endif
 
 void trySend() {
+  File datafile = SD.open(DATA_FILENAME, FILE_READ);
+  if(!datafile) {
+ #ifndef NDEBUG
+    logMessage("Could not open data file for reading");
+#endif
+    datafile.close();
+    return;
+  }
+  int count = 0;
+  uint8_t len = sizeof(buf);
+  uint8_t from;
+  while(datafile.available()) {
+    enableRadio();
+    if(datagram.waitAvailableTimeout(LISTENING_TIMEOUT)) {
+      // we have been pinged
+      if(datagram.recvfromAck((uint8_t*)buf, &len, &from)) {
+        enableSD();
+        datafile.read(packet, sizeof(packet));
+        enableRadio();
+        ++count;
+        Serial.println(count);
+        if (!datagram.sendtoWait((uint8_t*)packet, sizeof(packet), from)) {
+#ifndef NDEBUG
+          Serial.print("sending packet failed");
+#endif
+        }
+      }
+    }
+  }
+  enableSD();
+  logMessage(String("Sent ") + String(count, DEC) + " bytes");
+  datafile.close();
   enableRadio();
   if(datagram.waitAvailableTimeout(LISTENING_TIMEOUT)) {
-    // we have been pinged
-    uint8_t len = sizeof(buf);
-    uint8_t from;
     if(datagram.recvfromAck((uint8_t*)buf, &len, &from)) {
-      String message = "Ping from ";
-      message += String(from, DEC);
-      logMessage(message);
-      enableSD();
-      File datafile = SD.open(DATA_FILENAME, FILE_READ);
-      if(datafile) {
-        while(datafile.available()) {
-          datafile.read(packet, sizeof(packet));
-          enableRadio();
-          if (!datagram.sendtoWait((uint8_t*)packet, sizeof(packet), from)) {
+      if (!datagram.sendtoWait((uint8_t*)pingData, sizeof(pingData), from)) { 
 #ifndef NDEBUG
-            Serial.println("sending packet failed");
+      Serial.println("sending eof failed");
 #endif
-            break;
-          }
-          Serial.print('.');
-          enableSD();
-        }
-        enableRadio();
-        if (!datagram.sendtoWait((uint8_t*)pingData, sizeof(pingData), from)) { 
-#ifndef NDEBUG
-          Serial.println("sending eof failed");
-#endif
-        }
+    return;
       }
-#ifndef NDEBUG
-      else {
-        logMessage("Could not open data file");
-      }
-#endif
-    enableSD();
-    datafile.close();
     }
   }
 }
