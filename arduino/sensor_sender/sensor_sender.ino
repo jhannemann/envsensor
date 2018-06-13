@@ -11,8 +11,8 @@
 
 // IDs 1-127 are senders
 // IDs 128-160 are receivers
-const uint8_t SYSTEM_ID = 2;
-const int SENSOR_PERIOD = 10000; // ms
+const uint8_t SYSTEM_ID = 4;
+const int SENSOR_PERIOD = 60000; // ms
 const float RADIO_FREQUENCY = 900.0f; //mHz
 const char* LOG_FILENAME = "log.txt";
 const char* DATA_FILENAME = "data";

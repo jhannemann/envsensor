@@ -7,14 +7,15 @@
 #include <Adafruit_Sensor.h>
 #include <Adafruit_BME280.h>
 
-// #define NDEBUG
+//#define NDEBUG
 
 // role is either SENDER or Receiver
-#define SENDER
-// #define RECEIVER
+// #define SENDER
+#define RECEIVER
 // IDs 1-127 are senders
 // IDs 128-160 are receivers
-const uint8_t SYSTEM_ID = 1;
+const uint8_t SENDER_ID = 128;
+const uint8_t RECEIVER_ID = 1;
 const int SENSOR_PERIOD = 10000; // ms
 const float RADIO_FREQUENCY = 900.0f; //mHz
 const char* LOG_FILENAME = "log.txt";
@@ -33,9 +34,11 @@ float pressure;
 
 char packet[10];
 uint8_t buf[RH_RF95_MAX_MESSAGE_LEN];
-uint8_t pingData = 0;
+uint8_t pingData = '.';
 
+#ifdef SENDER
 Adafruit_BME280 sensor;
+#endif
 
 RTC_PCF8523 rtc;
 DateTime now;
@@ -44,7 +47,12 @@ const int RADIO_LED = 9;
 const int RADIO_CS = 8;
 const int RADIO_IRQ = 3;
 RH_RF95 radio(RADIO_CS, RADIO_IRQ);
-RHReliableDatagram datagram(radio, SYSTEM_ID);
+#ifdef SENDER
+RHReliableDatagram datagram(radio, SENDER_ID);
+#endif
+#ifdef RECEIVER
+RHReliableDatagram datagram(radio, RECEIVER_ID);
+#endif
 
 const int SD_CS = 10;
 
@@ -70,6 +78,7 @@ void logMessage(String message) {
   }
 }
 
+#ifdef SENDER
 void getSensor() {
 #ifdef SENSOR_FORCED_MODE
   sensor.takeForcedMeasurement();
@@ -79,6 +88,7 @@ void getSensor() {
   humidity = sensor.readHumidity();
   pressure = sensor.readPressure()/100.0f;
 }
+#endif
 
 void writeData() {
   enableSD();
@@ -89,7 +99,7 @@ void writeData() {
   uint8_t ihumidity = (uint8_t)(humidity);
   // convert pressure to fixed point, one significant decimal
   uint16_t ipressure = (uint16_t)(pressure*10);
-  memcpy(&packet[0], &SYSTEM_ID, 1);
+  memcpy(&packet[0], &SENDER_ID, 1);
   memcpy(&packet[1], &timestamp, 4);
   memcpy(&packet[5], &itemperature, 2);
   memcpy(&packet[7], &ihumidity, 1);
@@ -126,6 +136,7 @@ void enableSD() {
   digitalWrite(SD_CS, LOW);
 }
 
+#ifdef SENDER
 void initializeSensor() {
   if(!sensor.begin()) {
 #ifndef NDEBUG
@@ -143,19 +154,20 @@ void initializeSensor() {
   // wait a while for the sensor to get ready
   delay(100);
 }
+#endif
 
 void initializeRadio() {
   pinMode(RADIO_LED, OUTPUT);
   pinMode(RADIO_CS, OUTPUT);
   enableRadio();
-  if(!radio.init()){
+  if(!datagram.init()){
 #ifndef NDEBUG
     logMessage("Couldn't find radio");
 #endif
     while(1) delay(60000);
   }
   radio.setFrequency(RADIO_FREQUENCY);
-  radio.sleep();
+  //radio.sleep();
 }
 
 void initializeRTC() {
@@ -205,15 +217,15 @@ void trySend() {
   enableRadio();
   if(datagram.waitAvailableTimeout(LISTENING_TIMEOUT)){
     // we have been pinged
-    uint8_t len = sizeof(buf);
+    uint8_t len = sizeof(packet);
     uint8_t from;
-    if(datagram.recvfromAck(buf, &len, &from)) {
-      String message = "Ping from ";
+    if(datagram.recvfromAck((uint8_t*)packet, &len, &from)) {
+      String message = "Packet from ";
       message += String(from, DEC);
       logMessage(message);
     }
   }
-  //enableRadio();
+  enableRadio();
   //radio.sleep();
 }
 #endif
@@ -224,11 +236,19 @@ void tryReceive(uint8_t id) {
   message += String(id, DEC);
   logMessage(message);
   enableRadio();
+  digitalWrite(LED_BUILTIN, HIGH);
   if(datagram.sendtoWait(&pingData, sizeof(pingData), id)) {
-    message = "Sucessfully pinged ";
-    message += String(id, DEC);
-    logMessage(message);
+    uint8_t len = sizeof(packet);
+    uint8_t from;
+    if (datagram.recvfromAckTimeout((uint8_t*)packet, &len, 2000, &from)) {
+      message = "Received packet from ";
+      message += String(from, DEC);
+      logMessage(message);
+      writeData();
+      enableRadio();
+    }
   }
+  digitalWrite(LED_BUILTIN, LOW);
 }
 #endif
 
@@ -258,6 +278,7 @@ void loop() {
 
 #ifdef RECEIVER
   tryReceive(1);
-  delay(1000);
+  //writeData();
+  //delay(1000);
 #endif
 }

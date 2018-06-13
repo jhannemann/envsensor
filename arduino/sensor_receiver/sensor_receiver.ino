@@ -9,7 +9,7 @@
 
 // IDs 1-127 are senders
 // IDs 128-160 are receivers
-const uint8_t SYSTEM_ID = 128;
+const uint8_t SYSTEM_ID = 130;
 const float RADIO_FREQUENCY = 900.0f; //mHz
 const char* LOG_FILENAME = "log.txt";
 const char* DATA_FILENAME = "data";
@@ -163,7 +163,8 @@ void setup() {
 }
 
 void loop() {
-  tryReceive(1);
-  tryReceive(2);
-  delay(2000);
+  for(int i=1; i<=5; ++i) {
+    tryReceive(i);
+    //delay(1000);
+  }
 }
